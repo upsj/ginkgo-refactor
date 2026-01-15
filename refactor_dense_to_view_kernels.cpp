@@ -25,34 +25,18 @@ using ::clang::transformer::node;
 using namespace ::clang::ast_matchers;
 using namespace matchers;
 
-enum class qualifier_mode { only_const, only_mutable, both };
+auto inline isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
 
-auto inline isInKernelsNamespace() {
-  return hasAncestor(namespaceDecl(hasName("::gko::kernels")));
-}
-
-auto inline matchDependentDenseType(qualifier_mode mode) {
-  const auto matrix_matcher = hasUnqualifiedDesugaredType(
-      classTemplateSpecializationType("::gko::matrix::Dense"));
-  switch (mode) {
-  case qualifier_mode::only_const:
-    return pointerType(pointee(isConstQualified(), matrix_matcher));
-  case qualifier_mode::only_mutable:
-    return pointerType(pointee(unless(isConstQualified()), matrix_matcher));
-  default:
-    return pointerType(pointee(matrix_matcher));
-  }
-}
-
-auto inline matchDenseKernelParameter(const std::string &type_bind,
-                                      const std::string &vtype_bind,
+auto inline matchDenseKernelParameter(std::string_view type_bind,
+                                      std::string_view vtype_bind,
                                       qualifier_mode mode) {
   const auto loc_matcher = hasTypeLoc(
       pointerTypeLoc(hasPointeeLoc(typeLoc(hasDescendant(
                          templateSpecializationTypeLoc(hasTemplateArgumentLoc(
                              0, hasTypeLoc(typeLoc().bind(vtype_bind))))))))
           .bind(type_bind));
-  auto type_matcher = hasType(matchDependentDenseType(mode));
+  auto type_matcher = hasType(
+      instantiatedClassTemplatePointerType("::gko::matrix::Dense", mode));
   return parmVarDecl(isInKernelsNamespace(), type_matcher, loc_matcher);
 }
 
@@ -84,17 +68,14 @@ auto createRefactorDenseParamRule() {
 
 auto createRefactorDenseAtRule() {
   auto rule = makeRule(
-      traverse(
-          clang::TK_AsIs,
-          callExpr(
-              has(expr(cxxDependentScopeMemberExpr(
-                  hasMemberName("at"),
-                  hasDescendant(
-                      declRefExpr(hasDeclaration(matchDenseKernelParameter(
+      traverse(clang::TK_AsIs,
+               cxxMemberCallExpr(
+                   callee(memberExpr(hasDeclaration(namedDecl(hasName("at"))))),
+                   on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
                                       "type", "vtype", qualifier_mode::both)))
-                          .bind("ref"))))),
-              hasArgument(0, expr().bind("arg1")),
-              hasArgument(1, expr().bind("arg2")))),
+                          .bind("ref")),
+                   hasArgument(0, expr().bind("arg1")),
+                   hasArgument(1, expr().bind("arg2")))),
       changeTo(cat(node("ref"), "(", node("arg1"), ", ", node("arg2"), ")")),
       cat("Replacing Dense::at by dense_view::operator() inside gko::kernels "
           "namespace"));
@@ -104,12 +85,12 @@ auto createRefactorDenseAtRule() {
 auto createRefactorDenseGetSizeRule() {
   auto rule = makeRule(
       traverse(clang::TK_AsIs,
-               callExpr(has(expr(cxxDependentScopeMemberExpr(
-                   hasMemberName("get_size"),
-                   hasDescendant(
-                       declRefExpr(hasDeclaration(matchDenseKernelParameter(
-                                       "type", "vtype", qualifier_mode::both)))
-                           .bind("ref"))))))),
+               cxxMemberCallExpr(
+                   callee(memberExpr(
+                       hasDeclaration(namedDecl(hasName("get_size"))))),
+                   on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
+                                      "type", "vtype", qualifier_mode::both)))
+                          .bind("ref")))),
       changeTo(cat(node("ref"), ".size")),
       cat("Replacing Dense::get_size by dense_view::size inside gko::kernels "
           "namespace"));
@@ -119,14 +100,29 @@ auto createRefactorDenseGetSizeRule() {
 auto createRefactorDenseGetStrideRule() {
   auto rule = makeRule(
       traverse(clang::TK_AsIs,
-               callExpr(has(expr(cxxDependentScopeMemberExpr(
-                   hasMemberName("get_stride"),
-                   hasDescendant(
-                       declRefExpr(hasDeclaration(matchDenseKernelParameter(
-                                       "type", "vtype", qualifier_mode::both)))
-                           .bind("ref"))))))),
+               cxxMemberCallExpr(
+                   callee(memberExpr(
+                       hasDeclaration(namedDecl(hasName("get_stride"))))),
+                   on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
+                                      "type", "vtype", qualifier_mode::both)))
+                          .bind("ref")))),
       changeTo(cat(node("ref"), ".stride")),
       cat("Replacing Dense::get_stride by dense_view::stride inside "
+          "gko::kernels namespace"));
+  return rule;
+}
+
+auto createRefactorDenseGetValuesRule() {
+  auto rule = makeRule(
+      traverse(clang::TK_AsIs,
+               cxxMemberCallExpr(
+                   callee(memberExpr(hasDeclaration(namedDecl(anyOf(
+                       hasName("get_values"), hasName("get_const_values")))))),
+                   on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
+                                      "type", "vtype", qualifier_mode::both)))
+                          .bind("ref")))),
+      changeTo(cat(node("ref"), ".data")),
+      cat("Replacing Dense::get_(const_)values by dense_view::data inside "
           "gko::kernels namespace"));
   return rule;
 }
@@ -137,6 +133,7 @@ auto createRefactorKernelsDenseToViewRule() {
       createRefactorDenseParamRule(),
       createRefactorDenseAtRule(),
       createRefactorDenseGetSizeRule(),
+      createRefactorDenseGetValuesRule(),
   });
 }
 

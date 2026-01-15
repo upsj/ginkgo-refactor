@@ -10,9 +10,30 @@ namespace matchers {
 
 using namespace ::clang::ast_matchers;
 
-inline auto classTemplateSpecializationType(std::string_view name) {
-  return templateSpecializationType(
-      hasDeclaration(classTemplateDecl(hasName("::gko::matrix::Dense"))));
+auto inline isInNamespace(std::string_view name) {
+  return hasAncestor(namespaceDecl(hasName(name)));
+}
+
+auto inline instantiatedClassTemplatePointerType(std::string_view name,
+                                                 qualifier_mode mode) {
+  auto dense_class_matcher = recordType(
+      hasDeclaration(classTemplateSpecializationDecl(hasName(name))));
+  auto pointer_matcher = [&] {
+    switch (mode) {
+    case qualifier_mode::only_const:
+      return pointerType(pointee(isConstQualified(), dense_class_matcher));
+    case qualifier_mode::only_mutable:
+      return pointerType(
+          pointee(unless(isConstQualified()), dense_class_matcher));
+    case qualifier_mode::both:
+    default:
+      return pointerType(pointee(dense_class_matcher));
+    }
+  }();
+  // we need to get the canonical type in case this is the return type of a
+  // smart pointer's .get() function, which involves a SubstTemplateTypeParmType
+  // wrapper
+  return hasCanonicalType(pointer_matcher);
 }
 
 } // namespace matchers
