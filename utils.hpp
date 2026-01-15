@@ -10,10 +10,17 @@ namespace matchers {
 
 using namespace ::clang::ast_matchers;
 
+/**
+ * matches any decl node that is declared inside the given namespace
+ */
 auto inline isInNamespace(std::string_view name) {
   return hasAncestor(namespaceDecl(hasName(name)));
 }
 
+/**
+ * matches the type of a pointer (const or non-const or both depending on mode)
+ * pointing to an instantiated class template with the given name.
+ */
 auto inline instantiatedClassTemplatePointerType(std::string_view name,
                                                  qualifier_mode mode) {
   auto dense_class_matcher = recordType(
