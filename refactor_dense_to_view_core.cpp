@@ -90,30 +90,13 @@ auto createRefactorRawPtrConstDenseKernelArgument() {
 }
 
 auto createRefactorCoreDenseToViewRule() {
-  auto executorExpr = expr(hasType(executorType()));
-  auto executorRunMemberExpr = memberExpr(
-      hasDeclaration(namedDecl(hasName("run"))), isArrow(),
-      hasObjectExpression(cxxOperatorCallExpr(hasArgument(0, executorExpr))));
-  auto denseType = recordType(hasDeclaration(
-      classTemplateSpecializationDecl(hasName("::gko::matrix::Dense"))));
-  auto densePtrTypeConst = pointerType(pointee(isConstQualified(), denseType));
-  auto densePtrTypeMut =
-      pointerType(pointee(unless(isConstQualified()), denseType));
-  return applyFirst(
-      {// smart pointers before raw pointers, as the pattern is more specific
-       /*createRefactorSmartPtrDenseKernelArgument(),
-       createRefactorSmartPtrConstDenseKernelArgument(),
-       createRefactorRawPtrDenseKernelArgument(),
-       createRefactorRawPtrConstDenseKernelArgument(),*/
-       makeRule(traverse(clang::TK_AsIs,
-                         cxxMemberCallExpr(
-                             callee(executorRunMemberExpr),
-                             hasArgument(
-                                 0, callExpr(forEachArgumentWithParamType(
-                                        expr().bind("expr"),
-                                        referenceType(pointee(densePointerType(
-                                            qualifier_mode::only_const)))))))),
-                changeTo(node("expr"), cat("foo_const")), cat("const foo"))});
+  return applyFirst({
+      // smart pointers before raw pointers, as the pattern is more specific
+      createRefactorSmartPtrDenseKernelArgument(),
+      createRefactorSmartPtrConstDenseKernelArgument(),
+      createRefactorRawPtrDenseKernelArgument(),
+      createRefactorRawPtrConstDenseKernelArgument(),
+  });
 }
 
 // Boilerplate
