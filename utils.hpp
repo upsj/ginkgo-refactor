@@ -59,13 +59,15 @@ inline auto executorType() {
 
 inline auto executorExpr() { return expr(hasType(executorType())); }
 
-inline auto smartPtrCallExpr(std::string_view name, auto object_expr,
-                             auto... call_matchers) {
-  return cxxMemberCallExpr(
-      callee(memberExpr(hasDeclaration(namedDecl(hasName(name))), isArrow(),
-                        hasObjectExpression(
-                            cxxOperatorCallExpr(hasArgument(0, object_expr))))),
-      call_matchers...);
+inline auto namedMemberExpr(std::string_view name, auto object_expr,
+                            auto... other_matchers) {
+  return memberExpr(hasDeclaration(namedDecl(hasName(name))),
+                    hasObjectExpression(object_expr), other_matchers...);
+}
+
+inline auto smartPtrMemberExpr(std::string_view name, auto object_expr) {
+  return namedMemberExpr(name, cxxOperatorCallExpr(hasArgument(0, object_expr)),
+                         isArrow());
 }
 
 AST_MATCHER(clang::CallExpr, isMakeFunction) {
