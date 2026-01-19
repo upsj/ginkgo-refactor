@@ -70,6 +70,11 @@ inline auto smartPtrMemberExpr(std::string_view name, auto object_expr) {
                          isArrow());
 }
 
+inline auto smartPtrGetExpr() {
+  return materializeTemporaryExpr(
+      has(cxxMemberCallExpr(callee(namedMemberExpr("get", expr())))));
+}
+
 AST_MATCHER(clang::CallExpr, isMakeFunction) {
   auto CD = Node.getCalleeDecl();
   if (!CD) {

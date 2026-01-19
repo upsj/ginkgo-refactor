@@ -26,11 +26,11 @@ using namespace ::clang::ast_matchers;
 using namespace matchers;
 
 auto inline matchRawPtrDenseKernelArgument(qualifier_mode mode) {
-  return declRefExpr(hasType(densePointerType(mode)),
-                     hasParent(callExpr(
-                         isMakeFunction(),
-                         hasAncestor(cxxMemberCallExpr(callee(
-                             smartPtrMemberExpr("run", executorExpr())))))))
+  return expr(hasType(densePointerType(mode)), unless(smartPtrGetExpr()),
+              hasParent(
+                  callExpr(isMakeFunction(),
+                           hasAncestor(cxxMemberCallExpr(callee(
+                               smartPtrMemberExpr("run", executorExpr())))))))
       .bind("expr");
 }
 
