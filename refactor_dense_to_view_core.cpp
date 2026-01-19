@@ -26,30 +26,20 @@ using namespace ::clang::ast_matchers;
 using namespace matchers;
 
 auto inline matchRawPtrDenseKernelArgument(qualifier_mode mode) {
-  return smartPtrCallExpr(
-      "run", executorExpr(),
-      hasArgument(
-          0, callExpr(isMakeFunction(),
-                      forEachArgumentWithParamType(
-                          expr().bind("expr"),
-                          referenceType(pointee(densePointerType(mode)))))));
+  return declRefExpr(hasType(densePointerType(mode)),
+                     hasParent(callExpr(
+                         isMakeFunction(),
+                         hasAncestor(cxxMemberCallExpr(callee(
+                             smartPtrMemberExpr("run", executorExpr())))))))
+      .bind("expr");
 }
 
 auto inline matchSmartPtrDenseKernelArgument(qualifier_mode mode) {
   return cxxMemberCallExpr(
-      callee(memberExpr(hasDeclaration(namedDecl(hasName("run"))),
-                        hasObjectExpression(cxxOperatorCallExpr(
-                            hasArgument(0, executorExpr()))))),
-      hasArgument(
-          0,
-          callExpr(isMakeFunction(),
-                   forEachArgumentWithParamType(
-                       materializeTemporaryExpr(
-                           cxxMemberCallExpr(memberExpr(
-                               hasDeclaration(namedDecl(hasName("get"))),
+             hasType(densePointerType(mode)),
+             callee(memberExpr(hasDeclaration(namedDecl(hasName("get"))),
                                hasObjectExpression(expr().bind("smart_ptr")))))
-                           .bind("expr"),
-                       referenceType(pointee(densePointerType(mode)))))));
+      .bind("expr");
 }
 
 auto createRefactorSmartPtrDenseKernelArgument() {
