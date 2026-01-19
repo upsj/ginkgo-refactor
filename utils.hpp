@@ -69,7 +69,15 @@ inline auto smartPtrCallExpr(std::string_view name, auto object_expr,
 }
 
 AST_MATCHER(clang::CallExpr, isMakeFunction) {
-  return Node.getCalleeDecl()->getAsFunction()->getName().starts_with("make_");
+  auto CD = Node.getCalleeDecl();
+  if (!CD) {
+    return false;
+  }
+  auto F = CD->getAsFunction();
+  if (!F) {
+    return false;
+  }
+  return F->getName().starts_with("make_");
 }
 
 inline auto maybeBind(auto matcher, std::optional<std::string_view> name)
