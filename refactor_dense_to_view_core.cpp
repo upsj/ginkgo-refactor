@@ -1,3 +1,5 @@
+#include "utils.hpp"
+
 #include "clang-tidy/ClangTidyModule.h"
 #include "clang-tidy/ClangTidyModuleRegistry.h"
 #include "clang-tidy/utils/TransformerClangTidyCheck.h"
@@ -17,77 +19,37 @@ using ::clang::transformer::applyFirst;
 using ::clang::transformer::cat;
 using ::clang::transformer::changeTo;
 using ::clang::transformer::makeRule;
-using ::clang::transformer::name;
 using ::clang::transformer::node;
 
 using namespace ::clang::ast_matchers;
 
-AST_MATCHER(clang::CallExpr, isMakeFunction) {
-  return Node.getCalleeDecl()->getAsFunction()->getName().starts_with("make_");
-}
-
-enum class qualifier_mode { only_const, only_mutable, both };
-
-auto inline matchMaterializedDenseType(qualifier_mode mode) {
-  auto dense_class_matcher = recordType(hasDeclaration(
-      classTemplateSpecializationDecl(hasName("::gko::matrix::Dense"))));
-  auto pointer_matcher = [&] {
-    switch (mode) {
-    case qualifier_mode::only_const:
-      return pointerType(pointee(isConstQualified(), dense_class_matcher));
-    case qualifier_mode::only_mutable:
-      return pointerType(
-          pointee(unless(isConstQualified()), dense_class_matcher));
-    case qualifier_mode::both:
-    default:
-      return pointerType(pointee(dense_class_matcher));
-    }
-  }();
-  // we need to get the canonical type in case this is the return type of a
-  // smart pointer's .get() function, which involves a SubstTemplateTypeParmType
-  // wrapper
-  return hasCanonicalType(pointer_matcher);
-}
-
-auto inline matchExecutorExpr() {
-  return expr(hasType(elaboratedType(namesType(
-      templateSpecializationType(hasDeclaration(classTemplateSpecializationDecl(
-          isInStdNamespace(), hasName("shared_ptr"),
-          hasTemplateArgument(
-              0,
-              templateArgument(refersToType(qualType(hasDeclaration(
-                  cxxRecordDecl(anyOf(isDerivedFrom("::gko::Executor"),
-                                      hasName("::gko::Executor")))))))))))))));
-}
+using namespace matchers;
 
 auto inline matchRawPtrDenseKernelArgument(qualifier_mode mode) {
-  return cxxMemberCallExpr(
-      callee(memberExpr(hasDeclaration(namedDecl(hasName("run"))),
-                        hasObjectExpression(cxxOperatorCallExpr(
-                            hasArgument(0, matchExecutorExpr()))))),
-      hasArgument(0, callExpr(isMakeFunction(),
-                              forEachArgumentWithParamType(
-                                  expr().bind("expr"),
-                                  referenceType(pointee(
-                                      matchMaterializedDenseType(mode)))))));
+  return smartPtrCallExpr(
+      "run", executorExpr(),
+      hasArgument(
+          0, callExpr(isMakeFunction(),
+                      forEachArgumentWithParamType(
+                          expr().bind("expr"),
+                          referenceType(pointee(densePointerType(mode)))))));
 }
 
 auto inline matchSmartPtrDenseKernelArgument(qualifier_mode mode) {
   return cxxMemberCallExpr(
       callee(memberExpr(hasDeclaration(namedDecl(hasName("run"))),
                         hasObjectExpression(cxxOperatorCallExpr(
-                            hasArgument(0, matchExecutorExpr()))))),
+                            hasArgument(0, executorExpr()))))),
       hasArgument(
           0,
-          callExpr(
-              isMakeFunction(),
-              forEachArgumentWithParamType(
-                  materializeTemporaryExpr(
-                      cxxMemberCallExpr(memberExpr(
-                          hasDeclaration(namedDecl(hasName("get"))),
-                          hasObjectExpression(expr().bind("smart_ptr")))))
-                      .bind("expr"),
-                  referenceType(pointee(matchMaterializedDenseType(mode)))))));
+          callExpr(isMakeFunction(),
+                   forEachArgumentWithParamType(
+                       materializeTemporaryExpr(
+                           cxxMemberCallExpr(memberExpr(
+                               hasDeclaration(namedDecl(hasName("get"))),
+                               hasObjectExpression(expr().bind("smart_ptr")))))
+                           .bind("expr"),
+                       referenceType(pointee(densePointerType(mode)))))));
 }
 
 auto createRefactorSmartPtrDenseKernelArgument() {

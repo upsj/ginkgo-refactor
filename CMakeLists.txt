@@ -4,6 +4,7 @@ find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG)
 add_library(RefactorDenseToView MODULE refactor_dense_to_view_core.cpp refactor_dense_to_view_kernels.cpp)
 target_compile_options(RefactorDenseToView PRIVATE -fno-rtti)
+target_compile_features(RefactorDenseToView PRIVATE cxx_std_20)
 target_include_directories(RefactorDenseToView
     PRIVATE
         ${CLANG_INCLUDE_DIRS}

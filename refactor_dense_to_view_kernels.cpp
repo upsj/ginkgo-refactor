@@ -27,14 +27,10 @@ using namespace matchers;
 
 auto inline isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
 
-auto inline matchDenseKernelParameter(std::string_view type_bind,
-                                      std::string_view vtype_bind,
-                                      qualifier_mode mode) {
-  const auto loc_matcher = hasTypeLoc(
-      pointerTypeLoc(hasPointeeLoc(typeLoc(hasDescendant(
-                         templateSpecializationTypeLoc(hasTemplateArgumentLoc(
-                             0, hasTypeLoc(typeLoc().bind(vtype_bind))))))))
-          .bind(type_bind));
+auto inline matchDenseKernelParameter(qualifier_mode mode, bool match_typeLoc) {
+  const auto loc_matcher = hasTypeLoc(pointerTypeLoc(
+      hasPointeeLoc(typeLoc(hasDescendant(templateSpecializationTypeLoc(
+          hasTemplateArgumentLoc(0, hasTypeLoc(typeLoc().bind("vtype")))))))));
   auto type_matcher = hasType(
       instantiatedClassTemplatePointerType("::gko::matrix::Dense", mode));
   return parmVarDecl(isInKernelsNamespace(), type_matcher, loc_matcher);
@@ -43,9 +39,11 @@ auto inline matchDenseKernelParameter(std::string_view type_bind,
 auto createRefactorDenseParamRuleWithMacroSupport() {}
 
 auto createRefactorConstDenseParamRule() {
+  // we need to replace the entire declaration here, because the pointerTypeLoc
+  // doesn't capture the const, see
   auto rule = makeRule(
-      traverse(clang::TK_AsIs, matchDenseKernelParameter(
-                                   "type", "vtype", qualifier_mode::only_const))
+      traverse(clang::TK_AsIs,
+               matchDenseKernelParameter(qualifier_mode::only_const, true))
           .bind("param"),
       changeTo(
           cat("matrix::dense_view<const ", node("vtype"), "> ", name("param"))),
@@ -57,9 +55,8 @@ auto createRefactorConstDenseParamRule() {
 auto createRefactorDenseParamRule() {
   auto rule = makeRule(
       traverse(clang::TK_AsIs,
-               matchDenseKernelParameter("type", "vtype",
-                                         qualifier_mode::only_mutable))
-          .bind("param"),
+               matchDenseKernelParameter(qualifier_mode::only_mutable, true)
+                   .bind("param")),
       changeTo(cat("matrix::dense_view<", node("vtype"), "> ", name("param"))),
       cat("Replacing const Dense<ValueType> by dense_view<ValueType> inside "
           "gko::kernels namespace"));
@@ -72,7 +69,7 @@ auto createRefactorDenseAtRule() {
                cxxMemberCallExpr(
                    callee(memberExpr(hasDeclaration(namedDecl(hasName("at"))))),
                    on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
-                                      "type", "vtype", qualifier_mode::both)))
+                                      qualifier_mode::both, false)))
                           .bind("ref")),
                    hasArgument(0, expr().bind("arg1")),
                    hasArgument(1, expr().bind("arg2")))),
@@ -89,7 +86,7 @@ auto createRefactorDenseGetSizeRule() {
                    callee(memberExpr(
                        hasDeclaration(namedDecl(hasName("get_size"))))),
                    on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
-                                      "type", "vtype", qualifier_mode::both)))
+                                      qualifier_mode::both, false)))
                           .bind("ref")))),
       changeTo(cat(node("ref"), ".size")),
       cat("Replacing Dense::get_size by dense_view::size inside gko::kernels "
@@ -104,7 +101,7 @@ auto createRefactorDenseGetStrideRule() {
                    callee(memberExpr(
                        hasDeclaration(namedDecl(hasName("get_stride"))))),
                    on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
-                                      "type", "vtype", qualifier_mode::both)))
+                                      qualifier_mode::both, false)))
                           .bind("ref")))),
       changeTo(cat(node("ref"), ".stride")),
       cat("Replacing Dense::get_stride by dense_view::stride inside "
@@ -119,7 +116,7 @@ auto createRefactorDenseGetValuesRule() {
                    callee(memberExpr(hasDeclaration(namedDecl(anyOf(
                        hasName("get_values"), hasName("get_const_values")))))),
                    on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
-                                      "type", "vtype", qualifier_mode::both)))
+                                      qualifier_mode::both, false)))
                           .bind("ref")))),
       changeTo(cat(node("ref"), ".data")),
       cat("Replacing Dense::get_(const_)values by dense_view::data inside "
