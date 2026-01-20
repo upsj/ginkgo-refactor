@@ -84,6 +84,11 @@ AST_MATCHER(clang::CallExpr, isMakeFunction) {
   if (!F) {
     return false;
   }
+  auto I = F->getIdentifier();
+  if (!I) {
+    // avoid assertion failure inside getName()
+    return false;
+  }
   return F->getName().starts_with("make_");
 }
 
