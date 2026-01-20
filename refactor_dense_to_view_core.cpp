@@ -38,7 +38,11 @@ auto inline matchSmartPtrDenseKernelArgument(qualifier_mode mode) {
   return cxxMemberCallExpr(
              hasType(densePointerType(mode)),
              callee(memberExpr(hasDeclaration(namedDecl(hasName("get"))),
-                               hasObjectExpression(expr().bind("smart_ptr")))))
+                               hasObjectExpression(expr().bind("smart_ptr")))),
+             hasAncestor(
+                 callExpr(isMakeFunction(),
+                          hasAncestor(cxxMemberCallExpr(callee(
+                              smartPtrMemberExpr("run", executorExpr())))))))
       .bind("expr");
 }
 
