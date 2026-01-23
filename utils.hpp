@@ -44,7 +44,27 @@ inline auto instantiatedClassTemplatePointerType(std::string_view name,
 }
 
 inline auto densePointerType(qualifier_mode mode) {
-  return instantiatedClassTemplatePointerType("::gko::matrix::Dense", mode);
+  return hasType(
+      instantiatedClassTemplatePointerType("::gko::matrix::Dense", mode));
+}
+
+inline auto densePointerTypeLoc(qualifier_mode mode) {
+  // due to https://github.com/llvm/llvm-project/issues/177251 we can't use
+  // hasDescendant()
+  auto templateSpecializationMatcher = templateSpecializationTypeLoc(
+      hasTemplateArgumentLoc(0, hasTypeLoc(typeLoc().bind("vtype"))));
+  auto constLoc = pointerTypeLoc(hasPointeeLoc(
+      qualifiedTypeLoc(hasUnqualifiedLoc(templateSpecializationMatcher))));
+  auto mutLoc = pointerTypeLoc(hasPointeeLoc(templateSpecializationMatcher));
+  switch (mode) {
+  case qualifier_mode::only_const:
+    return hasTypeLoc(constLoc);
+  case qualifier_mode::only_mutable:
+    return hasTypeLoc(mutLoc);
+  case qualifier_mode::both:
+  default:
+    return hasTypeLoc(anyOf(constLoc, mutLoc));
+  }
 }
 
 inline auto executorType() {
@@ -90,15 +110,6 @@ AST_MATCHER(clang::CallExpr, isMakeFunction) {
     return false;
   }
   return F->getName().starts_with("make_");
-}
-
-inline auto maybeBind(auto matcher, std::optional<std::string_view> name)
-    -> decltype(matcher.bind(*name)) {
-  if (name) {
-    return matcher.bind(*name);
-  } else {
-    return matcher;
-  }
 }
 
 } // namespace matchers

@@ -26,7 +26,7 @@ using namespace ::clang::ast_matchers;
 using namespace matchers;
 
 auto inline matchRawPtrDenseKernelArgument(qualifier_mode mode) {
-  return expr(hasType(densePointerType(mode)), unless(smartPtrGetExpr()),
+  return expr(densePointerType(mode), unless(smartPtrGetExpr()),
               hasParent(
                   callExpr(isMakeFunction(),
                            hasAncestor(cxxMemberCallExpr(callee(
@@ -36,7 +36,7 @@ auto inline matchRawPtrDenseKernelArgument(qualifier_mode mode) {
 
 auto inline matchSmartPtrDenseKernelArgument(qualifier_mode mode) {
   return cxxMemberCallExpr(
-             hasType(densePointerType(mode)),
+             densePointerType(mode),
              callee(memberExpr(hasDeclaration(namedDecl(hasName("get"))),
                                hasObjectExpression(expr().bind("smart_ptr")))),
              hasAncestor(

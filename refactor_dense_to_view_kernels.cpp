@@ -28,12 +28,8 @@ using namespace matchers;
 auto inline isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
 
 auto inline matchDenseKernelParameter(qualifier_mode mode, bool match_typeLoc) {
-  const auto loc_matcher = hasTypeLoc(pointerTypeLoc(
-      hasPointeeLoc(typeLoc(hasDescendant(templateSpecializationTypeLoc(
-          hasTemplateArgumentLoc(0, hasTypeLoc(typeLoc().bind("vtype")))))))));
-  auto type_matcher = hasType(
-      instantiatedClassTemplatePointerType("::gko::matrix::Dense", mode));
-  return parmVarDecl(isInKernelsNamespace(), type_matcher, loc_matcher);
+  return parmVarDecl(isInKernelsNamespace(), densePointerType(mode),
+                     densePointerTypeLoc(mode));
 }
 
 auto createRefactorDenseParamRuleWithMacroSupport() {}
