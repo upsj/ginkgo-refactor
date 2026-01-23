@@ -7,13 +7,18 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Tooling/Transformer/RewriteRule.h" // makeRule
-#include "clang/Tooling/Transformer/Stencil.h"     // cat
+#include "clang/Tooling/Transformer/SourceCode.h"
+#include "clang/Tooling/Transformer/Stencil.h" // cat
+#include "clang/Tooling/Transformer/Transformer.h"
 #include <iostream>
 
 namespace {
 
+using ::clang::CharSourceRange;
+using ::clang::SourceRange;
 using ::clang::StringRef;
 using ::clang::tidy::ClangTidyCheckFactories;
 using ::clang::tidy::ClangTidyContext;
@@ -42,63 +47,39 @@ AST_POLYMORPHIC_MATCHER(
 }
 
 auto matchDenseParamInForwardDecl(qualifier_mode mode) {
-  auto build_matcher = [](auto... qualifierMatcher) {
-    return parmVarDecl(
-        hasTypeLoc(pointerTypeLoc(hasPointeeLoc(
-            hasDescendant(templateSpecializationTypeLoc(hasTemplateArgumentLoc(
-                0, hasTypeLoc(typeLoc().bind("vtype")))))))),
-        hasType(pointerType(
-            pointee(qualifierMatcher...,
-                    type(hasUnqualifiedDesugaredType(
-                        templateSpecializationType(hasDeclaration(
-                            namedDecl(hasName("::gko::matrix::Dense"))))))))),
-        hasAncestor(functionTemplateDecl(
-            isInKernelsNamespace(), unless(isFunctionTemplateDefinition()))));
-  };
+  auto templateSpecializationMatcher = templateSpecializationTypeLoc(
+      hasTemplateArgumentLoc(0, hasTypeLoc(typeLoc().bind("vtype"))));
+  auto denseTypeMatcher =
+      type(hasUnqualifiedDesugaredType(templateSpecializationType(
+          hasDeclaration(namedDecl(hasName("::gko::matrix::Dense"))))));
+  auto isInKernelFunctionFwdDecl = hasAncestor(functionTemplateDecl(
+      isInKernelsNamespace(), unless(isFunctionTemplateDefinition())));
+  auto constLoc = hasTypeLoc(pointerTypeLoc(hasPointeeLoc(
+      qualifiedTypeLoc(hasUnqualifiedLoc(templateSpecializationMatcher)))));
+  auto mutLoc =
+      hasTypeLoc(pointerTypeLoc(hasPointeeLoc(templateSpecializationMatcher)));
   switch (mode) {
   case qualifier_mode::only_const:
-    return build_matcher(isConstQualified());
+    return parmVarDecl(
+        constLoc,
+        hasType(pointerType(pointee(isConstQualified(), denseTypeMatcher))),
+        isInKernelFunctionFwdDecl);
   case qualifier_mode::only_mutable:
-    return build_matcher(unless(isConstQualified()));
+    return parmVarDecl(mutLoc,
+                       hasType(pointerType(pointee(unless(isConstQualified()),
+                                                   denseTypeMatcher))),
+                       isInKernelFunctionFwdDecl);
   case qualifier_mode::both:
   default:
-    return build_matcher();
+    return parmVarDecl(anyOf(constLoc, mutLoc),
+                       hasType(pointerType(pointee(denseTypeMatcher))),
+                       isInKernelFunctionFwdDecl);
   }
 }
 
-// Returns the full set of expansion locations of `Loc` from bottom to top-most
-// macro, if `Loc` is spelled in a macro argument. If `Loc` is spelled in the
-// macro definition, returns an empty vector.
-static llvm::SmallVector<clang::SourceLocation, 2>
-getMacroArgumentExpansionLocs(clang::SourceLocation Loc,
-                              const clang::SourceManager &SM) {
-  assert(Loc.isMacroID() && "Location must be in a macro");
-  llvm::SmallVector<clang::SourceLocation, 2> ArgLocs;
-  while (Loc.isMacroID()) {
-    const auto &Expansion = SM.getSLocEntry(SM.getFileID(Loc)).getExpansion();
-    if (Expansion.isMacroArgExpansion()) {
-      // Check the spelling location of the macro arg, in case the arg itself is
-      // in a macro expansion.
-      Loc = Expansion.getSpellingLoc();
-      ArgLocs.push_back(Expansion.getExpansionLocStart());
-    } else {
-      return {};
-    }
-  }
-  return ArgLocs;
-}
-
-static bool spelledInMacroDefinition(clang::CharSourceRange Range,
-                                     const clang::SourceManager &SM) {
-  if (Range.getBegin().isMacroID() && Range.getEnd().isMacroID()) {
-    // Check whether the range is entirely within a single macro argument by
-    // checking if they are in the same macro argument at every level.
-    auto B = getMacroArgumentExpansionLocs(Range.getBegin(), SM);
-    auto E = getMacroArgumentExpansionLocs(Range.getEnd(), SM);
-    return B.empty() || B != E;
-  }
-
-  return Range.getBegin().isMacroID() || Range.getEnd().isMacroID();
+static llvm::Error invalidArgumentError(std::string Message) {
+  return llvm::make_error<llvm::StringError>(llvm::errc::invalid_argument,
+                                             Message);
 }
 
 clang::transformer::RangeSelector spelled(clang::transformer::RangeSelector S) {
@@ -107,44 +88,66 @@ clang::transformer::RangeSelector spelled(clang::transformer::RangeSelector S) {
     llvm::Expected<clang::CharSourceRange> SRange = S(Result);
     if (!SRange)
       return SRange.takeError();
+    // fast case: the range is already spelled
+    const auto begin = SRange->getBegin();
+    const auto end = SRange->getEnd();
+    if (begin.isFileID() && end.isFileID()) {
+      return *SRange;
+    }
 
-    std::cout << "Base: "
-              << clang::Lexer::getSourceText(*SRange, *Result.SourceManager,
+    const auto &SM = *Result.SourceManager;
+    const auto spelledBegin = SM.getSpellingLoc(begin);
+    const auto spelledEnd = SM.getSpellingLoc(end);
+    auto result = clang::CharSourceRange(
+        clang::SourceRange(spelledBegin, spelledEnd), SRange->isTokenRange());
+    std::cout << "Spelled: "
+              << clang::Lexer::getSourceText(result, SM,
                                              Result.Context->getLangOpts())
                      .str()
-              << '\n'
-              << "Expanded: "
-              << clang::Lexer::getSourceText(
-                     Result.SourceManager->getExpansionRange(*SRange),
-                     *Result.SourceManager, Result.Context->getLangOpts())
-                     .str()
               << '\n';
-    auto begin = SRange->getBegin();
-    auto end = SRange->getEnd();
-    auto [begin_file, begin_offset] =
-        Result.SourceManager->getDecomposedSpellingLoc(begin);
-    auto [end_file, end_offset] =
-        Result.SourceManager->getDecomposedSpellingLoc(end);
-    auto begin_sloc = Result.SourceManager->getSLocEntry(begin_file);
-    auto end_sloc = Result.SourceManager->getSLocEntry(end_file);
-    auto begin_spelled =
-        begin_sloc.isExpansion()
-            ? begin_sloc.getExpansion().getSpellingLoc().getLocWithOffset(
-                  begin_offset)
-            : begin;
-    auto end_spelled =
-        end_sloc.isExpansion()
-            ? end_sloc.getExpansion().getSpellingLoc().getLocWithOffset(
-                  end_offset)
-            : end;
-    std::cout << "Spelled: "
-              << clang::Lexer::getSourceText(
-                     clang::CharSourceRange(
-                         clang::SourceRange(begin_spelled, end_spelled), true),
-                     *Result.SourceManager, Result.Context->getLangOpts())
-                     .str()
-              << '\n';
-    return Result.SourceManager->getExpansionRange(*SRange);
+    result.getBegin().dump(*Result.SourceManager);
+    result.getEnd().dump(*Result.SourceManager);
+    return result;
+  };
+}
+
+static llvm::Expected<clang::DynTypedNode>
+getNode(const clang::ast_matchers::BoundNodes &Nodes, StringRef ID) {
+  auto &NodesMap = Nodes.getMap();
+  auto It = NodesMap.find(ID);
+  if (It == NodesMap.end())
+    return invalidArgumentError("ID not bound: " + ID.str());
+  return It->second;
+}
+
+clang::transformer::RangeSelector spelledName(std::string ID) {
+  return [ID](const clang::ast_matchers::MatchFinder::MatchResult &Result)
+             -> llvm::Expected<clang::CharSourceRange> {
+    llvm::Expected<clang::DynTypedNode> N = getNode(Result.Nodes, ID);
+    if (!N)
+      return N.takeError();
+    auto &Node = *N;
+    if (const auto *D = Node.get<clang::NamedDecl>()) {
+      if (!D->getDeclName().isIdentifier())
+        return invalidArgumentError(ID + "name" + "identifier");
+      clang::SourceLocation L = D->getLocation();
+      auto spelledL = Result.SourceManager->getSpellingLoc(L);
+      auto R = CharSourceRange::getTokenRange(spelledL, spelledL);
+      // Verify that the range covers exactly the name.
+      // FIXME: extend this code to support cases like `operator +` or
+      // `foo<int>` for which this range will be too short.  Doing so will
+      // require subcasing `NamedDecl`, because it doesn't provide virtual
+      // access to the \c DeclarationNameInfo.
+      StringRef Text = clang::tooling::getText(R, *Result.Context);
+      if (Text != D->getName())
+        return llvm::make_error<llvm::StringError>(
+            llvm::errc::not_supported,
+            "range selected by name(node id=" + ID + "): '" + Text +
+                "' is different from decl name '" + D->getName() + "'");
+      return R;
+    }
+    return invalidArgumentError(
+        ID + "DeclRefExpr, NamedDecl, CXXCtorInitializer, TypeLoc");
   };
 }
 
@@ -152,12 +155,9 @@ auto createRefactorDenseParamRuleWithMacroSupport() {
   return makeRule(
       traverse(clang::TK_AsIs,
                matchDenseParamInForwardDecl(qualifier_mode::only_mutable)),
-      // make sure we only modify the things spelled inside macros,
-      // leave the vtype unchanged
-      {changeTo(spelled(enclose(before(node(RootID)), before(node("vtype")))),
-                cat("gko::dense_view<")),
-       changeTo(spelled(enclose(after(node("vtype")), after(node(RootID)))),
-                cat("> ", name(RootID)))},
+      {changeTo(spelled(node(RootID)),
+                cat("gko::dense_view<", spelled(node("vtype")), "> ",
+                    spelledName(RootID)))},
       cat("Rewrite gko::matrix::Dense<...>* to gko::dense_view<...> inside "
           "gko::kernels forward declarations"));
 }
@@ -166,12 +166,9 @@ auto createRefactorConstDenseParamRuleWithMacroSupport() {
   return makeRule(
       traverse(clang::TK_AsIs,
                matchDenseParamInForwardDecl(qualifier_mode::only_const)),
-      // make sure we only modify the things spelled inside macros,
-      // leave the vtype unchanged
-      {changeTo(enclose(before(node(RootID)), before(node("vtype"))),
-                cat("gko::dense_view<const ")),
-       changeTo(enclose(after(node("vtype")), after(node(RootID))),
-                cat("> ", name(RootID)))},
+      {changeTo(spelled(node(RootID)),
+                cat("gko::dense_view<const ", spelled(node("vtype")), "> ",
+                    spelledName(RootID)))},
       cat("Rewrite const gko::matrix::Dense<...>* to gko::dense_view<const "
           "...> inside gko::kernels forward declarations"));
 }
