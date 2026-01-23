@@ -51,7 +51,7 @@ auto createRefactorSmartPtrDenseKernelArgument() {
       traverse(clang::TK_AsIs,
                matchSmartPtrDenseKernelArgument(qualifier_mode::only_mutable)),
       changeTo(node("expr"), cat(node("smart_ptr"), "->get_device_view()")),
-      cat("Replacing smart_ptr Dense arguments by dense_view"));
+      cat("Replacing smart_ptr Dense arguments by device_view::dense"));
   return rule;
 }
 
@@ -61,7 +61,8 @@ auto createRefactorSmartPtrConstDenseKernelArgument() {
                matchSmartPtrDenseKernelArgument(qualifier_mode::only_const)),
       changeTo(node("expr"),
                cat(node("smart_ptr"), "->get_const_device_view()")),
-      cat("Replacing smart_ptr const Dense arguments by const dense_view"));
+      cat("Replacing smart_ptr const Dense arguments by const "
+          "device_view::dense"));
   return rule;
 }
 
@@ -70,7 +71,7 @@ auto createRefactorRawPtrDenseKernelArgument() {
       traverse(clang::TK_AsIs,
                matchRawPtrDenseKernelArgument(qualifier_mode::only_mutable)),
       changeTo(node("expr"), cat(node("expr"), "->get_device_view()")),
-      cat("Replacing Dense arguments by dense_view"));
+      cat("Replacing Dense arguments by device_view::dense"));
   return rule;
 }
 
@@ -79,7 +80,7 @@ auto createRefactorRawPtrConstDenseKernelArgument() {
       traverse(clang::TK_AsIs,
                matchRawPtrDenseKernelArgument(qualifier_mode::only_const)),
       changeTo(node("expr"), cat(node("expr"), "->get_const_device_view()")),
-      cat("Replacing const Dense arguments by const dense_view"));
+      cat("Replacing const Dense arguments by const device_view::dense"));
   return rule;
 }
 

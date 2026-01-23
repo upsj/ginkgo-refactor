@@ -41,9 +41,10 @@ auto createRefactorConstDenseParamRule() {
       traverse(clang::TK_AsIs,
                matchDenseKernelParameter(qualifier_mode::only_const, true))
           .bind("param"),
-      changeTo(
-          cat("matrix::dense_view<const ", node("vtype"), "> ", name("param"))),
-      cat("Replacing const Dense<ValueType> by dense_view<const ValueType> "
+      changeTo(cat("matrix::device_view::dense<const ", node("vtype"), "> ",
+                   name("param"))),
+      cat("Replacing const Dense<ValueType> by device_view::dense<const "
+          "ValueType> "
           "inside gko::kernels namespace"));
   return rule;
 }
@@ -53,8 +54,10 @@ auto createRefactorDenseParamRule() {
       traverse(clang::TK_AsIs,
                matchDenseKernelParameter(qualifier_mode::only_mutable, true)
                    .bind("param")),
-      changeTo(cat("matrix::dense_view<", node("vtype"), "> ", name("param"))),
-      cat("Replacing const Dense<ValueType> by dense_view<ValueType> inside "
+      changeTo(cat("matrix::device_view::dense<", node("vtype"), "> ",
+                   name("param"))),
+      cat("Replacing const Dense<ValueType> by device_view::dense<ValueType> "
+          "inside "
           "gko::kernels namespace"));
   return rule;
 }
@@ -70,7 +73,8 @@ auto createRefactorDenseAtRule() {
                    hasArgument(0, expr().bind("arg1")),
                    hasArgument(1, expr().bind("arg2")))),
       changeTo(cat(node("ref"), "(", node("arg1"), ", ", node("arg2"), ")")),
-      cat("Replacing Dense::at by dense_view::operator() inside gko::kernels "
+      cat("Replacing Dense::at by device_view::dense::operator() inside "
+          "gko::kernels "
           "namespace"));
   return rule;
 }
@@ -85,7 +89,8 @@ auto createRefactorDenseGetSizeRule() {
                                       qualifier_mode::both, false)))
                           .bind("ref")))),
       changeTo(cat(node("ref"), ".size")),
-      cat("Replacing Dense::get_size by dense_view::size inside gko::kernels "
+      cat("Replacing Dense::get_size by device_view::dense::size inside "
+          "gko::kernels "
           "namespace"));
   return rule;
 }
@@ -100,7 +105,7 @@ auto createRefactorDenseGetStrideRule() {
                                       qualifier_mode::both, false)))
                           .bind("ref")))),
       changeTo(cat(node("ref"), ".stride")),
-      cat("Replacing Dense::get_stride by dense_view::stride inside "
+      cat("Replacing Dense::get_stride by device_view::dense::stride inside "
           "gko::kernels namespace"));
   return rule;
 }
@@ -115,7 +120,8 @@ auto createRefactorDenseGetValuesRule() {
                                       qualifier_mode::both, false)))
                           .bind("ref")))),
       changeTo(cat(node("ref"), ".data")),
-      cat("Replacing Dense::get_(const_)values by dense_view::data inside "
+      cat("Replacing Dense::get_(const_)values by device_view::dense::data "
+          "inside "
           "gko::kernels namespace"));
   return rule;
 }

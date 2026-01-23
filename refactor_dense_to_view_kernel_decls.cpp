@@ -74,25 +74,25 @@ static llvm::Error invalidArgumentError(std::string Message) {
 }
 
 auto createRefactorDenseParamRuleWithMacroSupport() {
-  return makeRule(
-      traverse(clang::TK_AsIs,
-               matchDenseParamInForwardDecl(qualifier_mode::only_mutable)),
-      {changeTo(
-          spelled(node(RootID)),
-          cat("gko::dense_view<", spelled(node("vtype")), "> ", name(RootID)))},
-      cat("Rewrite gko::matrix::Dense<...>* to gko::dense_view<...> inside "
-          "gko::kernels forward declarations"));
+  return makeRule(traverse(clang::TK_AsIs, matchDenseParamInForwardDecl(
+                                               qualifier_mode::only_mutable)),
+                  {changeTo(spelled(node(RootID)),
+                            cat("matrix::device_view::dense<",
+                                spelled(node("vtype")), "> ", name(RootID)))},
+                  cat("Rewrite gko::matrix::Dense<...>* to "
+                      "matrix::device_view::dense<...> inside "
+                      "gko::kernels forward declarations"));
 }
 
 auto createRefactorConstDenseParamRuleWithMacroSupport() {
-  return makeRule(
-      traverse(clang::TK_AsIs,
-               matchDenseParamInForwardDecl(qualifier_mode::only_const)),
-      {changeTo(spelled(node(RootID)),
-                cat("gko::dense_view<const ", spelled(node("vtype")), "> ",
-                    name(RootID)))},
-      cat("Rewrite const gko::matrix::Dense<...>* to gko::dense_view<const "
-          "...> inside gko::kernels forward declarations"));
+  return makeRule(traverse(clang::TK_AsIs, matchDenseParamInForwardDecl(
+                                               qualifier_mode::only_const)),
+                  {changeTo(spelled(node(RootID)),
+                            cat("matrix::device_view::dense<const ",
+                                spelled(node("vtype")), "> ", name(RootID)))},
+                  cat("Rewrite const gko::matrix::Dense<...>* to "
+                      "matrix::device_view::dense<const "
+                      "...> inside gko::kernels forward declarations"));
 }
 
 auto createRefactorKernelDeclsDenseToViewRule() {
