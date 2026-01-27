@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 project(GinkgoRefactor CXX)
-find_package(LLVM 23.0 REQUIRED CONFIG)
-find_package(Clang 23.0 REQUIRED CONFIG)
+find_package(LLVM 22.0 REQUIRED CONFIG)
+find_package(Clang 22.0 REQUIRED CONFIG)
 find_package(GTest REQUIRED CONFIG)
 add_library(RefactorDenseToViewRules
     OBJECT
