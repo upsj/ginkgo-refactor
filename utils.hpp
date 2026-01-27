@@ -92,7 +92,12 @@ inline auto namedMemberExpr(std::string_view name, auto object_expr,
 }
 
 inline auto smartPtrMemberExpr(std::string_view name, auto object_expr) {
-  return namedMemberExpr(name, cxxOperatorCallExpr(hasArgument(0, object_expr)),
+  // if there is an implicit cast involved, e.g. calling a base class
+  // function, we may need to add another implicitCastExpr matcher
+  return namedMemberExpr(name,
+                         anyOf(cxxOperatorCallExpr(hasArgument(0, object_expr)),
+                               implicitCastExpr(has(cxxOperatorCallExpr(
+                                   hasArgument(0, object_expr))))),
                          isArrow());
 }
 
