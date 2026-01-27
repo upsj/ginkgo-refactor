@@ -61,28 +61,25 @@ auto matchDenseParamInForwardDecl(qualifier_mode mode) {
   }
 }
 
-static llvm::Error invalidArgumentError(std::string Message) {
-  return llvm::make_error<llvm::StringError>(llvm::errc::invalid_argument,
-                                             Message);
-}
-
 auto createRefactorDenseParamRuleWithMacroSupport() {
-  return makeRule(traverse(clang::TK_AsIs, matchDenseParamInForwardDecl(
-                                               qualifier_mode::only_mutable)),
-                  {changeTo(spelled(node(RootID)),
-                            cat("matrix::device_view::dense<",
-                                spelled(node("vtype")), "> ", name(RootID)))},
-                  cat("Rewrite gko::matrix::Dense<...>* to "
-                      "matrix::device_view::dense<...> inside "
-                      "gko::kernels forward declarations"));
+  return makeRule(
+      traverse(clang::TK_AsIs,
+               matchDenseParamInForwardDecl(qualifier_mode::only_mutable)),
+      {changeTo(backported::spelled(node(RootID)),
+                cat("matrix::device_view::dense<", spelled(node("vtype")), "> ",
+                    backported::name(RootID)))},
+      cat("Rewrite gko::matrix::Dense<...>* to "
+          "matrix::device_view::dense<...> inside "
+          "gko::kernels forward declarations"));
 }
 
 auto createRefactorConstDenseParamRuleWithMacroSupport() {
   return makeRule(traverse(clang::TK_AsIs, matchDenseParamInForwardDecl(
                                                qualifier_mode::only_const)),
-                  {changeTo(spelled(node(RootID)),
+                  {changeTo(backported::spelled(node(RootID)),
                             cat("matrix::device_view::dense<const ",
-                                spelled(node("vtype")), "> ", name(RootID)))},
+                                backported::spelled(node("vtype")), "> ",
+                                backported::name(RootID)))},
                   cat("Rewrite const gko::matrix::Dense<...>* to "
                       "matrix::device_view::dense<const "
                       "...> inside gko::kernels forward declarations"));
