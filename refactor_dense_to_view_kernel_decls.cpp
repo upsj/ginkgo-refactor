@@ -24,7 +24,6 @@ using ::clang::transformer::makeRule;
 using ::clang::transformer::name;
 using ::clang::transformer::node;
 using ::clang::transformer::RootID;
-using ::clang::transformer::spelled;
 
 using namespace ::clang::ast_matchers;
 using namespace matchers;
