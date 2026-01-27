@@ -61,15 +61,15 @@ auto matchDenseParamInForwardDecl(qualifier_mode mode) {
 }
 
 auto createRefactorDenseParamRuleWithMacroSupport() {
-  return makeRule(
-      traverse(clang::TK_AsIs,
-               matchDenseParamInForwardDecl(qualifier_mode::only_mutable)),
-      {changeTo(backported::spelled(node(RootID)),
-                cat("matrix::device_view::dense<", spelled(node("vtype")), "> ",
-                    backported::name(RootID)))},
-      cat("Rewrite gko::matrix::Dense<...>* to "
-          "matrix::device_view::dense<...> inside "
-          "gko::kernels forward declarations"));
+  return makeRule(traverse(clang::TK_AsIs, matchDenseParamInForwardDecl(
+                                               qualifier_mode::only_mutable)),
+                  {changeTo(backported::spelled(node(RootID)),
+                            cat("matrix::device_view::dense<",
+                                backported::spelled(node("vtype")), "> ",
+                                backported::name(RootID)))},
+                  cat("Rewrite gko::matrix::Dense<...>* to "
+                      "matrix::device_view::dense<...> inside "
+                      "gko::kernels forward declarations"));
 }
 
 auto createRefactorConstDenseParamRuleWithMacroSupport() {
