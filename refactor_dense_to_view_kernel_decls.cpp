@@ -1,8 +1,6 @@
+#include "refactor_rules.hpp"
 #include "utils.hpp"
 
-#include "clang-tidy/ClangTidyModule.h"
-#include "clang-tidy/ClangTidyModuleRegistry.h"
-#include "clang-tidy/utils/TransformerClangTidyCheck.h"
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Type.h"
@@ -14,15 +12,8 @@
 #include "clang/Tooling/Transformer/Stencil.h" // cat
 #include "clang/Tooling/Transformer/Transformer.h"
 
-namespace {
-
 using ::clang::CharSourceRange;
 using ::clang::SourceRange;
-using ::clang::StringRef;
-using ::clang::tidy::ClangTidyCheckFactories;
-using ::clang::tidy::ClangTidyContext;
-using ::clang::tidy::ClangTidyModule;
-using ::clang::tidy::utils::TransformerClangTidyCheck;
 using ::clang::transformer::after;
 using ::clang::transformer::applyFirst;
 using ::clang::transformer::before;
@@ -39,6 +30,8 @@ using namespace ::clang::ast_matchers;
 using namespace matchers;
 
 auto inline isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
+
+namespace {
 
 AST_POLYMORPHIC_MATCHER(
     isFunctionTemplateDefinition,
@@ -95,42 +88,11 @@ auto createRefactorConstDenseParamRuleWithMacroSupport() {
                       "...> inside gko::kernels forward declarations"));
 }
 
-auto createRefactorKernelDeclsDenseToViewRule() {
+} // namespace
+
+OurRewriteRule createRefactorKernelDeclsDenseToViewRule() {
   return applyFirst({
       createRefactorDenseParamRuleWithMacroSupport(),
       createRefactorConstDenseParamRuleWithMacroSupport(),
   });
 }
-
-// Boilerplate
-
-class RefactorKernelDeclsDenseToViewCheck : public TransformerClangTidyCheck {
-public:
-  RefactorKernelDeclsDenseToViewCheck(StringRef Name, ClangTidyContext *Context)
-      : TransformerClangTidyCheck(createRefactorKernelDeclsDenseToViewRule(),
-                                  Name, Context) {}
-};
-
-class RefactorKernelDeclsDenseToViewModule : public ClangTidyModule {
-public:
-  void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
-    CheckFactories.registerCheck<RefactorKernelDeclsDenseToViewCheck>(
-        "gko-refactor-kernel-decls-dense-to-view");
-  }
-};
-
-} // namespace
-
-namespace clang::tidy {
-
-// Register the module using this statically initialized variable.
-static ClangTidyModuleRegistry::Add<::RefactorKernelDeclsDenseToViewModule>
-    refactorKernelDeclsDenseToViewInit(
-        "gko-refactor-kernel-decls-dense-to-view",
-        "Adds 'gko-refactor-kernel-decls-dense-to-view' checks.");
-
-// This anchor is used to force the linker to link in the generated object file
-// and thus register the module.
-volatile int anchor_for_refactor_dense_to_view_kernel_decls = 0;
-
-} // namespace clang::tidy

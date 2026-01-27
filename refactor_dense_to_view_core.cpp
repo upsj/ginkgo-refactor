@@ -1,20 +1,11 @@
+#include "refactor_rules.hpp"
 #include "utils.hpp"
 
-#include "clang-tidy/ClangTidyModule.h"
-#include "clang-tidy/ClangTidyModuleRegistry.h"
-#include "clang-tidy/utils/TransformerClangTidyCheck.h"
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Tooling/Transformer/RewriteRule.h" // makeRule
 #include "clang/Tooling/Transformer/Stencil.h"     // cat
 
-namespace {
-
-using ::clang::StringRef;
-using ::clang::tidy::ClangTidyCheckFactories;
-using ::clang::tidy::ClangTidyContext;
-using ::clang::tidy::ClangTidyModule;
-using ::clang::tidy::utils::TransformerClangTidyCheck;
 using ::clang::transformer::applyFirst;
 using ::clang::transformer::cat;
 using ::clang::transformer::changeTo;
@@ -24,6 +15,8 @@ using ::clang::transformer::node;
 using namespace ::clang::ast_matchers;
 
 using namespace matchers;
+
+namespace {
 
 auto inline matchRawPtrDenseKernelArgument(qualifier_mode mode) {
   return expr(densePointerType(mode), unless(smartPtrGetExpr()),
@@ -84,7 +77,9 @@ auto createRefactorRawPtrConstDenseKernelArgument() {
   return rule;
 }
 
-auto createRefactorCoreDenseToViewRule() {
+} // namespace
+
+OurRewriteRule createRefactorCoreDenseToViewRule() {
   return applyFirst({
       // smart pointers before raw pointers, as the pattern is more specific
       createRefactorSmartPtrDenseKernelArgument(),
@@ -93,36 +88,3 @@ auto createRefactorCoreDenseToViewRule() {
       createRefactorRawPtrConstDenseKernelArgument(),
   });
 }
-
-// Boilerplate
-
-class RefactorCoreDenseToViewCheck : public TransformerClangTidyCheck {
-public:
-  RefactorCoreDenseToViewCheck(StringRef Name, ClangTidyContext *Context)
-      : TransformerClangTidyCheck(createRefactorCoreDenseToViewRule(), Name,
-                                  Context) {}
-};
-
-class RefactorCoreDenseToViewModule : public ClangTidyModule {
-public:
-  void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
-    CheckFactories.registerCheck<RefactorCoreDenseToViewCheck>(
-        "gko-refactor-core-dense-to-view");
-  }
-};
-
-} // namespace
-
-namespace clang::tidy {
-
-// Register the module using this statically initialized variable.
-static ClangTidyModuleRegistry::Add<::RefactorCoreDenseToViewModule>
-    refactorCoreDenseToViewInit(
-        "gko-refactor-core-dense-to-view",
-        "Adds 'gko-refactor-core-dense-to-view' checks.");
-
-// This anchor is used to force the linker to link in the generated object file
-// and thus register the module.
-volatile int anchor_for_refactor_dense_to_view_core = 0;
-
-} // namespace clang::tidy

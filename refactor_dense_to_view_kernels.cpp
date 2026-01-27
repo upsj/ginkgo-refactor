@@ -1,20 +1,11 @@
+#include "refactor_rules.hpp"
 #include "utils.hpp"
 
-#include "clang-tidy/ClangTidyModule.h"
-#include "clang-tidy/ClangTidyModuleRegistry.h"
-#include "clang-tidy/utils/TransformerClangTidyCheck.h"
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Tooling/Transformer/RewriteRule.h" // makeRule
 #include "clang/Tooling/Transformer/Stencil.h"     // cat
 
-namespace {
-
-using ::clang::StringRef;
-using ::clang::tidy::ClangTidyCheckFactories;
-using ::clang::tidy::ClangTidyContext;
-using ::clang::tidy::ClangTidyModule;
-using ::clang::tidy::utils::TransformerClangTidyCheck;
 using ::clang::transformer::applyFirst;
 using ::clang::transformer::cat;
 using ::clang::transformer::changeTo;
@@ -25,14 +16,14 @@ using ::clang::transformer::node;
 using namespace ::clang::ast_matchers;
 using namespace matchers;
 
+namespace {
+
 auto inline isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
 
 auto inline matchDenseKernelParameter(qualifier_mode mode, bool match_typeLoc) {
   return parmVarDecl(isInKernelsNamespace(), densePointerType(mode),
                      densePointerTypeLoc(mode));
 }
-
-auto createRefactorDenseParamRuleWithMacroSupport() {}
 
 auto createRefactorConstDenseParamRule() {
   // we need to replace the entire declaration here, because the pointerTypeLoc
@@ -89,13 +80,15 @@ auto createRefactorDenseGetterRule(std::string_view old_name,
               on(declRefExpr(hasDeclaration(matchDenseKernelParameter(
                                  qualifier_mode::both, false)))
                      .bind("ref")))),
-      changeTo(cat(node("ref"), ".new_name")),
+      changeTo(cat(node("ref"), ".", new_name)),
       cat("Replacing Dense::", old_name, " by device_view::dense::", new_name,
           " inside gko::kernels namespace"));
   return rule;
 }
 
-auto createRefactorKernelsDenseToViewRule() {
+} // namespace
+
+OurRewriteRule createRefactorKernelsDenseToViewRule() {
   return applyFirst({
       createRefactorConstDenseParamRule(),
       createRefactorDenseParamRule(),
@@ -106,36 +99,3 @@ auto createRefactorKernelsDenseToViewRule() {
       createRefactorDenseGetterRule("get_const_values", "data"),
   });
 }
-
-// Boilerplate
-
-class RefactorKernelsDenseToViewCheck : public TransformerClangTidyCheck {
-public:
-  RefactorKernelsDenseToViewCheck(StringRef Name, ClangTidyContext *Context)
-      : TransformerClangTidyCheck(createRefactorKernelsDenseToViewRule(), Name,
-                                  Context) {}
-};
-
-class RefactorKernelsDenseToViewModule : public ClangTidyModule {
-public:
-  void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
-    CheckFactories.registerCheck<RefactorKernelsDenseToViewCheck>(
-        "gko-refactor-kernels-dense-to-view");
-  }
-};
-
-} // namespace
-
-namespace clang::tidy {
-
-// Register the module using this statically initialized variable.
-static ClangTidyModuleRegistry::Add<::RefactorKernelsDenseToViewModule>
-    refactorKernelsDenseToViewInit(
-        "gko-refactor-kernels-dense-to-view",
-        "Adds 'gko-refactor-kernels-dense-to-view' checks.");
-
-// This anchor is used to force the linker to link in the generated object file
-// and thus register the module.
-volatile int anchor_for_refactor_dense_to_view_kernels = 0;
-
-} // namespace clang::tidy
