@@ -48,3 +48,6 @@ target_link_libraries(TestRefactor
         LLVMSupport
         LLVMTargetParser
     )
+enable_testing()
+add_test(TestRefactor TestRefactor)
+
