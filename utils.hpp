@@ -23,6 +23,8 @@ inline auto isInNamespace(std::string_view name) {
   return hasAncestor(namespaceDecl(hasName(name)));
 }
 
+inline auto isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
+
 /**
  * matches the type of a pointer (const or non-const or both depending on mode)
  * pointing to an instantiated class template with the given name.

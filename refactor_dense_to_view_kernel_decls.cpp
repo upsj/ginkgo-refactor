@@ -28,8 +28,6 @@ using ::clang::transformer::RootID;
 using namespace ::clang::ast_matchers;
 using namespace matchers;
 
-auto inline isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
-
 namespace {
 
 AST_POLYMORPHIC_MATCHER(

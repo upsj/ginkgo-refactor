@@ -18,9 +18,9 @@ using namespace matchers;
 
 namespace {
 
-auto inline isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
+inline auto isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
 
-auto inline matchDenseKernelParameter(qualifier_mode mode, bool match_typeLoc) {
+inline auto matchDenseKernelParameter(qualifier_mode mode, bool match_typeLoc) {
   return parmVarDecl(isInKernelsNamespace(), densePointerType(mode),
                      densePointerTypeLoc(mode));
 }
