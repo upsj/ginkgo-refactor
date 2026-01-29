@@ -79,10 +79,20 @@ void kernel(matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar) 
 TEST_F(RefactorKernelsTest, WorksInInstantiatedCode) {
   auto Rule = createRefactorKernelsDenseToViewRule();
   std::string Input = R"cc(
-namespace gko::kernels {    
+namespace gko::kernels {
 
 template <typename ValueType>
-void kernel(matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar) {
+void kernel(std::shared_ptr<const gko::ReferenceExecutor>, matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar) {
+    foo->get_size();
+    bar->get_stride();
+    foo->get_values();
+    bar->get_const_values();
+    foo->at(0, 1);
+    bar->at(2, 3);
+}
+
+template <typename ValueType>
+void non_kernel(matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar) {
     foo->get_size();
     bar->get_stride();
     foo->get_values();
@@ -93,26 +103,38 @@ void kernel(matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar) 
 
 // this won't be refactored, but also doesn't need to be,
 // because in almost all of Ginkgo's code, it happens inside macros
-template void kernel<double>(matrix::Dense<double>* foo, const matrix::Dense<double>* bar);
+template void kernel<double>(std::shared_ptr<const gko::ReferenceExecutor>, matrix::Dense<double>* foo, const matrix::Dense<double>* bar);
+template void non_kernel<double>(matrix::Dense<double>* foo, const matrix::Dense<double>* bar);
 
 }
   )cc";
   std::string Expected = R"cc(
-namespace gko::kernels {    
+namespace gko::kernels {
 
 template <typename ValueType>
-void kernel(matrix::device_view::dense<ValueType> foo, matrix::device_view::dense<const ValueType> bar) {
+void kernel(std::shared_ptr<const gko::ReferenceExecutor>, matrix::device_view::dense<ValueType> foo, matrix::device_view::dense<const ValueType> bar) {
     foo.size;
     bar.stride;
     foo.data;
     bar.data;
     foo(0, 1);
     bar(2, 3);
+}    
+
+template <typename ValueType>
+void non_kernel(matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar) {
+    foo->get_size();
+    bar->get_stride();
+    foo->get_values();
+    bar->get_const_values();
+    foo->at(0, 1);
+    bar->at(2, 3);
 }
 
 // this won't be refactored, but also doesn't need to be,
 // because in almost all of Ginkgo's code, it happens inside macros
-template void kernel<double>(matrix::Dense<double>* foo, const matrix::Dense<double>* bar);
+template void kernel<double>(std::shared_ptr<const gko::ReferenceExecutor>, matrix::Dense<double>* foo, const matrix::Dense<double>* bar);
+template void non_kernel<double>(matrix::Dense<double>* foo, const matrix::Dense<double>* bar);
 
 }
   )cc";
