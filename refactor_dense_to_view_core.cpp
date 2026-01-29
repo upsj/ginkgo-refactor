@@ -18,24 +18,27 @@ using namespace matchers;
 
 namespace {
 
-auto inline matchRawPtrDenseKernelArgument(qualifier_mode mode) {
+inline auto isKernelCall() {
+  return callExpr(anyOf(
+      callExpr(isMakeFunction(),
+               hasAncestor(cxxMemberCallExpr(
+                   callee(smartPtrMemberExpr("run", executorExpr()))))),
+      callExpr(hasDeclaration(functionDecl(
+          isInKernelsNamespace(), hasParameter(0, hasType(executorType())))))));
+}
+
+inline auto matchRawPtrDenseKernelArgument(qualifier_mode mode) {
   return expr(densePointerType(mode), unless(smartPtrGetExpr()),
-              hasParent(
-                  callExpr(isMakeFunction(),
-                           hasAncestor(cxxMemberCallExpr(callee(
-                               smartPtrMemberExpr("run", executorExpr())))))))
+              hasParent(isKernelCall()))
       .bind("expr");
 }
 
-auto inline matchSmartPtrDenseKernelArgument(qualifier_mode mode) {
+inline auto matchSmartPtrDenseKernelArgument(qualifier_mode mode) {
   return cxxMemberCallExpr(
              densePointerType(mode),
              callee(memberExpr(hasDeclaration(namedDecl(hasName("get"))),
                                hasObjectExpression(expr().bind("smart_ptr")))),
-             hasAncestor(
-                 callExpr(isMakeFunction(),
-                          hasAncestor(cxxMemberCallExpr(callee(
-                              smartPtrMemberExpr("run", executorExpr())))))))
+             hasAncestor(isKernelCall()))
       .bind("expr");
 }
 

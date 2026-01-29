@@ -11,6 +11,11 @@ TEST_F(RefactorCoreTest, Works) {
   auto Rule = createRefactorCoreDenseToViewRule();
   std::string Input = R"cc(
 namespace gko {
+namespace kernels {
+
+void foo(std::shared_ptr<const gko::ReferenceExecutor> exec, gko::matrix::Dense<double>*, gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*);
+
+}
 
 Operation make_kernel(gko::matrix::Dense<double>*, gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*);
 
@@ -23,12 +28,18 @@ void foo() {
     const gko::matrix::Dense<double>* mtx4;
     exec->run(make_kernel(mtx.get(), mtx2, mtx3.get(), mtx4));
     ref->run(make_kernel(mtx.get(), mtx2, mtx3.get(), mtx4));
+    kernels::foo(ref, mtx.get(), mtx2, mtx3.get(), mtx4);
 }
 
 }
   )cc";
   std::string Expected = R"cc(
 namespace gko {
+namespace kernels {
+
+void foo(std::shared_ptr<const gko::ReferenceExecutor> exec, gko::matrix::Dense<double>*, gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*);
+
+}
 
 Operation make_kernel(gko::matrix::Dense<double>*, gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*, const gko::matrix::Dense<double>*);
 
@@ -41,6 +52,7 @@ void foo() {
     const gko::matrix::Dense<double>* mtx4;
     exec->run(make_kernel(mtx->get_device_view(), mtx2->get_device_view(), mtx3->get_const_device_view(), mtx4->get_const_device_view()));
     ref->run(make_kernel(mtx->get_device_view(), mtx2->get_device_view(), mtx3->get_const_device_view(), mtx4->get_const_device_view()));
+    kernels::foo(ref, mtx->get_device_view(), mtx2->get_device_view(), mtx3->get_const_device_view(), mtx4->get_const_device_view());
 }
 
 }
