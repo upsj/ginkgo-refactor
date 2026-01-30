@@ -13,8 +13,24 @@ TEST_F(RefactorKernelDeclsTest, DoesNothingOutsideKernelsNamespace) {
 namespace gko {
 
 template <typename ValueType>
-void kernel(matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar);
+void kernel(std::shared_ptr<const gko::ReferenceExecutor>, matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar);
 
+}
+  )cc";
+
+  testRule(Rule, Input, Input);
+}
+
+TEST_F(RefactorKernelDeclsTest, DoesNothingWithoutExecParameter) {
+  auto Rule = createRefactorKernelDeclsDenseToViewRule();
+  std::string Input = R"cc(
+namespace gko {
+namespace kernels {
+
+template <typename ValueType>
+void non_kernel(matrix::Dense<ValueType>* foo, const matrix::Dense<ValueType>* bar);
+
+}
 }
   )cc";
 
@@ -45,6 +61,7 @@ namespace gko::kernels {
 
 #define FUNCTION_DECL(ValueType)      \
     void kernel(                         \
+      std::shared_ptr<const gko::ReferenceExecutor>, \
       matrix::Dense<ValueType>* foo,  \
       const matrix::Dense<ValueType>* bar)
 
@@ -58,6 +75,7 @@ namespace gko::kernels {
 
 #define FUNCTION_DECL(ValueType)                  \
     void kernel(                                     \
+      std::shared_ptr<const gko::ReferenceExecutor>, \
       matrix::device_view::dense<ValueType> foo,  \
       matrix::device_view::dense<const ValueType> bar)
 

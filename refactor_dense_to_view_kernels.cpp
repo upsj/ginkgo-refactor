@@ -21,8 +21,10 @@ namespace {
 inline auto isInKernelsNamespace() { return isInNamespace("::gko::kernels"); }
 
 inline auto matchDenseKernelParameter(qualifier_mode mode, bool match_typeLoc) {
-  return parmVarDecl(isInKernelsNamespace(), densePointerType(mode),
-                     densePointerTypeLoc(mode));
+  return parmVarDecl(
+      isInKernelsNamespace(), densePointerType(mode),
+      hasAncestor(functionDecl(hasParameter(0, hasType(executorType())))),
+      densePointerTypeLoc(mode));
 }
 
 auto createRefactorConstDenseParamRule() {

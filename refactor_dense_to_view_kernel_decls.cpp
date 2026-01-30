@@ -40,8 +40,12 @@ auto matchDenseParamInForwardDecl(qualifier_mode mode) {
   auto denseTypeMatcher =
       type(hasUnqualifiedDesugaredType(templateSpecializationType(
           hasDeclaration(namedDecl(hasName("::gko::matrix::Dense"))))));
+  // there seems to be no easy matcher way of accessing the parmVarDecls of a
+  // functionTemplateDecl, so we just use ancestor/descendant queries
+  auto execParmVarDecl = parmVarDecl(hasType(executorType()));
   auto isInKernelFunctionFwdDecl = hasAncestor(functionTemplateDecl(
-      isInKernelsNamespace(), unless(isFunctionTemplateDefinition())));
+      hasDescendant(execParmVarDecl), isInKernelsNamespace(),
+      unless(isFunctionTemplateDefinition())));
   auto typeLoc = densePointerTypeLoc(mode);
   auto matcher = [&](auto... qualifierMatcher) {
     return parmVarDecl(typeLoc, hasType(pointerType(pointee(denseTypeMatcher))),
